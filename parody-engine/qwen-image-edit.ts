@@ -95,7 +95,36 @@ async function uploadImage(imageDataUri: string, suggestedName: string): Promise
 //   KSamplerAdvanced → VAEDecode → SaveImageAdvanced
 // ---------------------------------------------------------------------------
 
-function buildWorkflow(uploadedFilename: string, editPrompt: string, seed: number): Record<string, unknown> {
+/**
+ * Snap a dimension to the nearest multiple of 64 (Qwen's latent grid requirement).
+ * Always rounds up to avoid going below the minimum.
+ */
+function snapTo64(n: number): number {
+  return Math.ceil(n / 64) * 64;
+}
+
+/**
+ * Given a target aspect ratio (e.g. 768×1344), fit it inside Qwen's
+ * recommended max (1024 on the long edge) while preserving the ratio
+ * and snapping both axes to multiples of 64.
+ */
+function qwenCanvasSize(targetW: number, targetH: number): { width: number; height: number } {
+  // Scale so the long edge is ≤ 1024, then snap both to 64
+  const maxEdge = 1024;
+  const scale   = Math.min(1, maxEdge / Math.max(targetW, targetH));
+  return {
+    width:  snapTo64(Math.round(targetW * scale)),
+    height: snapTo64(Math.round(targetH * scale)),
+  };
+}
+
+function buildWorkflow(
+  uploadedFilename: string,
+  editPrompt: string,
+  seed: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): Record<string, unknown> {
   const cfg = config.qwen;
   // Use 4-step Lightning config when turbo is enabled; otherwise use standard steps
   const steps   = cfg.enableTurbo ? 4 : cfg.steps;
@@ -152,12 +181,12 @@ function buildWorkflow(uploadedFilename: string, editPrompt: string, seed: numbe
       },
     },
 
-    // ── Latent canvas (1024×1024, 1 layer, batch 1) ───────────────────────
+    // ── Latent canvas — sized to match the video output aspect ratio ───────
     "40": {
       class_type: "EmptyQwenImageLayeredLatentImage",
       inputs: {
-        width:      1024,
-        height:     1024,
+        width:      canvasWidth,
+        height:     canvasHeight,
         layers:     1,
         batch_size: 1,
       },
@@ -201,7 +230,7 @@ function buildWorkflow(uploadedFilename: string, editPrompt: string, seed: numbe
   };
 
   // Optionally inject the Lightning LoRA for 4-step turbo
-  if (cfg.enableTurbo && cfg.loraName && cfg.loraName !== "None") {
+  if (cfg.enableTurbo && cfg.loraName && cfg.loraName !== "") {
     nodes["13"] = {
       class_type: "LoraLoaderModelOnly",
       inputs: {
@@ -308,11 +337,15 @@ async function retrieveImage(filename: string, outputPath: string): Promise<stri
  * @param sourceDataUri   The original frame as a data URI (from thumbnailDataUri)
  * @param editInstruction The LLM-generated edit instruction
  * @param videoId         Used as the output filename stem
+ * @param targetWidth     Desired output width (defaults to config.minimax.width)
+ * @param targetHeight    Desired output height (defaults to config.minimax.height)
  */
 export async function editFrame(
   sourceDataUri: string,
   editInstruction: string,
-  videoId: string
+  videoId: string,
+  targetWidth?: number,
+  targetHeight?: number,
 ): Promise<QwenEditResult> {
   const outputDir = ensureOutputDir();
   const outputPath = path.join(outputDir, `${videoId}_edited.png`);
@@ -329,7 +362,14 @@ export async function editFrame(
     };
   }
 
+  // Derive canvas size from the video output dimensions (preserves aspect ratio,
+  // long edge capped at 1024, both axes snapped to multiples of 64).
+  const tW = targetWidth  ?? config.minimax.width;
+  const tH = targetHeight ?? config.minimax.height;
+  const { width: canvasW, height: canvasH } = qwenCanvasSize(tW, tH);
+
   console.log(`\n[qwen-edit] Editing frame for video ${videoId}`);
+  console.log(`[qwen-edit] Canvas: ${canvasW}×${canvasH} (from target ${tW}×${tH})`);
   console.log(`[qwen-edit] Instruction: "${editInstruction.slice(0, 100)}"`);
 
   // 1. Upload source frame
@@ -340,7 +380,7 @@ export async function editFrame(
   const seed     = config.qwen.seed === -1
     ? Math.floor(Math.random() * 2 ** 32)
     : config.qwen.seed;
-  const workflow = buildWorkflow(uploadedName, editInstruction, seed);
+  const workflow = buildWorkflow(uploadedName, editInstruction, seed, canvasW, canvasH);
   const promptId = await queuePrompt(workflow);
   console.log(`[qwen-edit] Queued → prompt_id=${promptId}`);
 
