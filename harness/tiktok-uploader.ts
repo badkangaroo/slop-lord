@@ -44,26 +44,24 @@ import { pauseGuard } from "./pause-guard.js";
 
 const SEL = {
   // Upload page entry points
-  fileInput:         'input[type="file"][accept*="video"]',
-  uploadArea:        '[class*="upload-card"], [data-e2e="upload-btn"], [class*="drag-upload"]',
+  fileInput:        'input[type="file"]',
+  // Upload complete — container appears once server-side processing is done
+  uploadDone:       '[data-e2e="upload_status_container"]',
 
-  // Processing state
-  processingBar:     '[class*="upload-progress"], [class*="processing"], [role="progressbar"]',
+  // Caption editor — TikTok Studio uses Draft.js (contenteditable inside caption_container)
+  captionContainer: '[data-e2e="caption_container"]',
+  captionEditor:    '[data-e2e="caption_container"] .public-DraftEditor-content',
 
-  // Caption editor — TikTok uses a contenteditable div
-  captionEditor:     '[data-e2e="caption-input"], div[contenteditable="true"]',
+  // Visibility / privacy
+  visibilitySelect: '[data-e2e="video_visibility_container"] .Select__trigger',
+  visibilityOption: (label: string) => `[role="option"]:has-text("${label}")`,
 
-  // Privacy selector
-  privacyDropdown:   '[data-e2e="video-range-selector"], [class*="privacy-select"]',
-  privacyOption:     (label: string) =>
-    `[data-e2e="range-${label.toLowerCase()}"], li:has-text("${label}")`,
+  // Post / discard — confirmed data-e2e values from live DOM snapshot
+  postButton:       '[data-e2e="post_video_button"]',
+  discardButton:    '[data-e2e="discard_post_button"]',
 
-  // Post / submit
-  postButton:        '[data-e2e="post-btn"], button:has-text("Post")',
-  discardButton:     'button:has-text("Discard")',
-
-  // Success confirmation
-  successIndicator:  '[data-e2e="upload-done"], [class*="post-success"], h2:has-text("Your video has")',
+  // Success — Studio resets to fresh upload page after posting
+  successIndicator: '[data-e2e="upload_status_container"]:not(.has-video), [data-e2e="select_video_container"]',
 } as const;
 
 const UPLOAD_URL = "https://www.tiktok.com/creator-center/upload";
@@ -139,6 +137,25 @@ async function navigateToUpload(page: Page): Promise<void> {
   await page.waitForTimeout(3000);
 }
 
+/**
+ * Dismiss any react-joyride onboarding overlay that intercepts pointer events.
+ * This must be called BEFORE any click/type on the Studio form fields.
+ * The overlay blocks caption editor clicks, not just the Post button.
+ */
+async function dismissOverlay(page: Page): Promise<void> {
+  // 1. Hide via JS (fastest — no polling, no timing dependency)
+  await page.evaluate(() => {
+    const portal = document.getElementById("react-joyride-portal");
+    if (portal) (portal as HTMLElement).style.display = "none";
+    const overlay = document.querySelector<HTMLElement>('[data-test-id="overlay"]');
+    if (overlay) overlay.style.display = "none";
+  });
+  // 2. Best-effort click on any Skip / close button the tour renders
+  await page.locator(
+    'button:has-text("Skip"), button:has-text("Got it"), button:has-text("×"), [aria-label="Close"]'
+  ).first().click({ timeout: 2000 }).catch(() => {});
+}
+
 async function attachFile(page: Page, videoPath: string): Promise<void> {
   console.log(`[uploader] Attaching file: ${path.basename(videoPath)}`);
 
@@ -154,69 +171,43 @@ async function attachFile(page: Page, videoPath: string): Promise<void> {
 
 async function waitForProcessing(page: Page, timeoutSec: number): Promise<void> {
   console.log("[uploader] Waiting for TikTok video processing to complete…");
-  const deadline = Date.now() + timeoutSec * 1000;
-
-  // Strategy: wait until the processing indicator disappears OR the caption
-  // editor becomes visible (which only appears after processing is done).
-  while (Date.now() < deadline) {
-    await pauseGuard.check();
-
-    const captionVisible = await page.locator(SEL.captionEditor).first()
-      .isVisible()
-      .catch(() => false);
-
-    if (captionVisible) {
-      console.log("[uploader] Processing complete — caption editor visible.");
-      return;
-    }
-
-    // Also check for any error state
-    const errorText = await page.locator('[class*="error"], [data-e2e="upload-error"]')
-      .first()
-      .textContent()
-      .catch(() => null);
-    if (errorText) {
-      throw new Error(`[uploader] TikTok upload error: ${errorText}`);
-    }
-
-    const elapsed = Math.round((Date.now() - (deadline - timeoutSec * 1000)) / 1000);
-    if (elapsed % 15 === 0) {
-      console.log(`[uploader] Still processing… (${elapsed}s elapsed)`);
-    }
-    await page.waitForTimeout(2000);
-  }
-
-  throw new Error(`[uploader] Timed out waiting for video processing after ${timeoutSec}s`);
+  // upload_status_container appears once TikTok has finished server-side encoding.
+  // It contains the filename, resolution, and file size — and the Post button becomes active.
+  await page.locator(SEL.uploadDone).first()
+    .waitFor({ state: "visible", timeout: timeoutSec * 1000 });
+  // Brief pause for the Post button and caption editor to fully hydrate
+  await page.waitForTimeout(1500);
+  console.log("[uploader] Processing complete — upload_status_container visible.");
 }
 
 async function fillCaption(page: Page, caption: string): Promise<void> {
   console.log(`[uploader] Setting caption: "${caption.slice(0, 80)}…"`);
+
+  // TikTok Studio uses Draft.js — the editor is a contenteditable div.
+  // We must click to focus, select all existing placeholder text, then type.
+  // editor.fill() does NOT work on Draft.js; keyboard.type() does.
   const editor = page.locator(SEL.captionEditor).first();
   await editor.waitFor({ state: "visible", timeout: 15_000 });
-
-  // Clear existing placeholder text and type the caption
-  await editor.click();
-  await page.keyboard.press("Control+A");
-  await editor.fill(caption);
-
-  // Small pause so TikTok registers the input before we move on
-  await page.waitForTimeout(1000);
+  await editor.click({ force: true });
+  await page.keyboard.press("Meta+A");   // select all (macOS); clears filename placeholder
+  await page.keyboard.type(caption, { delay: 10 });
+  await page.waitForTimeout(800);
 }
 
 async function setPrivacy(page: Page, privacy: string): Promise<void> {
-  if (privacy === "Public") return; // Public is the default on TikTok Studio
+  if (privacy === "Public") return; // "Everyone" is the default — no action needed
 
   console.log(`[uploader] Setting privacy: ${privacy}`);
   try {
-    const dropdown = page.locator(SEL.privacyDropdown).first();
-    const visible = await dropdown.isVisible().catch(() => false);
+    const trigger = page.locator(SEL.visibilitySelect).first();
+    const visible = await trigger.isVisible().catch(() => false);
     if (!visible) {
-      console.warn("[uploader] Privacy dropdown not visible — leaving as default (Public).");
+      console.warn("[uploader] Visibility select not visible — leaving as default (Everyone/Public).");
       return;
     }
-    await dropdown.click({ timeout: 10_000 });
+    await trigger.click({ timeout: 10_000 });
     await page.waitForTimeout(500);
-    await page.locator(SEL.privacyOption(privacy)).first().click({ timeout: 10_000 });
+    await page.locator(SEL.visibilityOption(privacy)).first().click({ timeout: 10_000 });
     await page.waitForTimeout(500);
   } catch (err) {
     console.warn(`[uploader] Could not set privacy to ${privacy}: ${(err as Error).message}. Leaving as default.`);
@@ -227,26 +218,26 @@ async function submitPost(page: Page): Promise<void> {
   console.log("[uploader] Clicking Post…");
   const postBtn = page.locator(SEL.postButton).first();
   await postBtn.waitFor({ state: "visible", timeout: 15_000 });
-  await postBtn.click({ timeout: 15_000 });
+  // force:true bypasses any remaining overlay pointer-event interception
+  await postBtn.click({ force: true, timeout: 15_000 });
 }
 
 async function waitForSuccess(page: Page): Promise<string | null> {
   console.log("[uploader] Waiting for post success confirmation…");
+  // After clicking Post, Studio navigates back to the fresh upload page
+  // (select_video_container reappears). Wait for that as the success signal.
   try {
-    await page.locator(SEL.successIndicator).first()
+    await page.locator('[data-e2e="select_video_container"]').first()
       .waitFor({ state: "visible", timeout: 30_000 });
-    console.log("[uploader] ✅ Post confirmed by TikTok.");
+    console.log("[uploader] ✅ Post confirmed — Studio reset to fresh upload page.");
   } catch {
-    // TikTok Studio doesn't always show a persistent success element —
-    // the page often just resets to a fresh upload state.
-    // Log the post-submit URL for diagnostics; if we got here with no
-    // thrown error the click succeeded.
     const currentUrl = page.url();
     console.log(`[uploader] Post URL after submit: ${currentUrl}`);
     console.warn("[uploader] Success indicator not matched — assuming posted (no error visible).");
   }
 
-  // Try to extract the new video URL from any link on the page
+  // Try to find the newly posted video URL from the Posts feed
+  // (Studio doesn't always surface it on the upload page itself)
   try {
     const videoLink = await page.locator('a[href*="/video/"]').first()
       .getAttribute("href", { timeout: 5000 });
@@ -295,6 +286,10 @@ export async function uploadToTikTok(opts: UploadOptions): Promise<UploadResult>
 
     await pauseGuard.check();
     await waitForProcessing(page, processingTimeoutSec);
+
+    // Dismiss the react-joyride onboarding overlay BEFORE any form interaction.
+    // The overlay blocks pointer events on the caption editor and Post button alike.
+    await dismissOverlay(page);
 
     await pauseGuard.check();
     await fillCaption(page, caption);
