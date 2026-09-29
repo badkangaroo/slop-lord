@@ -1,0 +1,36 @@
+{
+  "name": "slop-lord",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "agent": "tsx scanner/agent.ts",
+    "agent:loop": "tsx scanner/agent.ts --loop",
+    "pick": "tsx scripts/pick-target.ts",
+    "pick:dry": "tsx scripts/pick-target.ts --dry-run",
+    "test:login": "tsx scripts/test-login.ts",
+    "smoke": "tsx scripts/smoke-test-pipeline.ts",
+    "smoke:fast": "tsx scripts/smoke-test-pipeline.ts --skip-video",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts"
+  },
+  "dependencies": {
+    "@browserbasehq/stagehand": "^1.14.0",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.45.3",
+    "js-yaml": "^4.1.0",
+    "openai": "^4.52.0",
+    "pg": "^8.23.0",
+    "playwright": "^1.45.0",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.23.1",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

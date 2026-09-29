@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment — secrets never committed
+.env
+
+# Build output
+dist/
+*.js.map
+
+# Generated media — large binary outputs, not source
+downloads/
+generated/
+edited-frames/
+smoke-output/
+
+# Research scrapes — firecrawl cache, not source
+.firecrawl/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp

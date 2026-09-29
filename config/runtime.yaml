@@ -1,0 +1,114 @@
+# SLOP-LORD Runtime Configuration
+# All addresses, ports, and tuning parameters live here.
+# Environment variables with matching names override these values at startup.
+# Never hardcode addresses in source files — always read from this config.
+
+browser:
+  cdpPort: 9222
+  cdpHost: "localhost"
+  # Persistent Chrome profile — session cookies survive restarts
+  profileDir: "~/.slop-lord/chrome-profile"
+  # How long to wait for Chrome CDP to become available (seconds)
+  cdpReadyTimeoutSec: 30
+  # How long to idle when the human grabs the mouse (seconds)
+  humanIdleSec: 5
+
+lmStudio:
+  baseUrl: "http://10.0.1.8:1234/v1"
+  model: "eclipsed-phoenix-26b-a4b-heretic"
+  temperatureCreative: 0.8   # used for brief generation
+  temperatureDeterministic: 0.1  # used for classification / scoring
+
+comfyui:
+  host: "10.0.1.3"
+  port: 8188
+  # Named style presets — these must match workflow names in your ComfyUI instance.
+  # Add / remove presets here; the web UI Style Studio dropdown reads this list.
+  stylePresets:
+    - name: "default"
+      description: "Balanced general-purpose style"
+    - name: "anime"
+      description: "Flat cel-shaded anime aesthetic"
+    - name: "grunge"
+      description: "Distressed lo-fi texture"
+    - name: "corporate"
+      description: "Clean stock-photo realism (for irony)"
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "slop_lord"
+  user: "slop"
+  # password is read from DB_PASSWORD env var only — never written here
+  poolMin: 2
+  poolMax: 10
+
+searxng:
+  url: "http://localhost:8080"
+  timeoutMs: 10000
+
+firecrawl:
+  url: "http://localhost:3002"
+  apiKey: "local"
+  timeoutMs: 30000
+
+# Stagehand LLM — used only for browser DOM reasoning (act / extract)
+# This is SEPARATE from the LM Studio model used by the Parody Engine.
+# Stagehand requires an OpenAI or Anthropic API key.
+# Override via OPENAI_API_KEY or ANTHROPIC_API_KEY environment variables.
+# Override model via STAGEHAND_MODEL (must be an AvailableModel value).
+stagehand:
+  model: "gpt-4o-mini"   # cheapest model that works reliably for DOM tasks
+
+scanner:
+  intervalMinutes: 60
+  tssThreshold: 0.65
+  dedupWindowHours: 48
+  # Max candidates to evaluate per scan run before stopping
+  maxCandidatesPerRun: 50
+
+qwen:
+  # Qwen-Image-Edit via ComfyUI on the LAN DGX Spark (10.0.1.3:8188).
+  # These are the actual filenames present on that instance (confirmed via /object_info).
+  unetName:  "qwen_image_edit_2511_bf16.safetensors"
+  clipName:  "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+  vaeName:   "qwen_image_vae.safetensors"
+  # Lightning 4-step LoRA for fast generation
+  loraName:  "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors"
+  enableTurbo: true      # uses the Lightning LoRA (4 steps instead of 20)
+  steps: 20              # ignored when turbo=true
+  seed: -1               # -1 = random each run
+  # Where to save edited frames locally (fetched back from ComfyUI /view)
+  outputDir: "./edited-frames"
+
+minimax:
+  # MiniMax H3 running locally via ComfyUI on the DGX Spark (10.0.1.3:8188)
+  # All requests go to the same ComfyUI instance as Qwen-Image-Edit.
+  # No API key required — local inference only.
+  # These are the actual filenames present on the DGX Spark (confirmed via /object_info).
+  unetName:     "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+  clipName:     "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+  vaeName:      "minimax_h3_video_vae_fp16.safetensors"
+  audioVaeName: "minimax_h3_audio_vae_fp32.safetensors"
+  # No turbo LoRA — standard 20-step res_multistep sampler (spec: BasicGuider, no CFG)
+  loraName:     ""
+  enableTurbo:  false
+  turboSteps:   20
+  turboStrength: 1.0
+  width:        768          # output width  (768×1344 = 9:16 portrait for TikTok)
+  height:       1344         # output height
+  duration:     5            # seconds → 125 frames at 24fps on 17k+5 grid
+  pollIntervalMs: 5000       # poll /history every 5s
+  pollTimeoutMs:  3600000    # max wait 1 hour — first run loads ~35 GB of weights
+  # Where to save generated videos locally (fetched back from ComfyUI /view)
+  outputDir: "./generated"
+
+web:
+  port: 3030
+  host: "0.0.0.0"
+
+downloads:
+  # Where transcoded videos are saved on the local machine.
+  # Each video is stored as <videoId>.mp4 at 480p.
+  # Override via DOWNLOADS_DIR env var.
+  dir: "./downloads"
