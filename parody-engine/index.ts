@@ -23,7 +23,9 @@
  *       ↓
  *  Download .mp4            ← save to ./generated/<task_id>.mp4
  *       ↓
- *  Write content_briefs     ← persist brief + all paths to Postgres
+ *  Upload to TikTok         ← TikTok Studio via live Chrome CDP session
+ *       ↓
+ *  Write content_briefs     ← persist brief + all paths + TikTok URL to Postgres
  */
 
 import { db } from "../db/client.js";
@@ -32,6 +34,7 @@ import { eq } from "drizzle-orm";
 import { generateBrief } from "./brief-generator.js";
 import { editFrame } from "./qwen-image-edit.js";
 import { dispatchToMinimax } from "./minimax-dispatch.js";
+import { uploadToTikTok, buildCaption } from "../harness/tiktok-uploader.js";
 import type { TrendDossier } from "../db/schema.js";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +46,7 @@ export interface ParodyResult {
   briefId:       string;
   minimaxTaskId: string;
   generatedPath: string;
+  uploadedVideoUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,23 +69,25 @@ async function persistBrief(
   brief: import("./brief-generator.js").ContentBrief,
   editedFramePath: string,
   taskId: string,
-  generatedPath: string
+  generatedPath: string,
+  uploadedVideoUrl: string | null
 ): Promise<string> {
   const [row] = await db
     .insert(contentBriefs)
     .values({
-      dossierId:       brief.dossierId,
-      premise:         brief.premise,
-      character:       brief.character,
-      shots:           brief.shots,
-      kokoroVoiceTag:  brief.kokoroVoiceTag,
-      imagePrompt:     brief.imagePrompt,
-      editInstruction: brief.editInstruction,
+      dossierId:        brief.dossierId,
+      premise:          brief.premise,
+      character:        brief.character,
+      shots:            brief.shots,
+      kokoroVoiceTag:   brief.kokoroVoiceTag,
+      imagePrompt:      brief.imagePrompt,
+      editInstruction:  brief.editInstruction,
       editedFramePath,
-      minimaxTaskId:   taskId,
+      minimaxTaskId:    taskId,
       generatedPath,
-      dispatched:      true,
-      dispatchJobId:   taskId,
+      uploadedVideoUrl,
+      dispatched:       true,
+      dispatchJobId:    taskId,
     })
     .returning({ id: contentBriefs.id });
 
@@ -151,14 +157,45 @@ export async function runParodyPipeline(dossier: TrendDossier): Promise<ParodyRe
     return null;
   }
 
-  // Step 7: Persist everything to DB
-  const briefId = await persistBrief(brief, editedPath, dispatchResult.taskId, dispatchResult.generatedPath);
+  // Step 7: Upload to TikTok via TikTok Studio in live Chrome session
+  const sourceTemplate = dossier.template as Record<string, unknown> | null;
+  const sourceHashtags = (sourceTemplate?.suggestedWords as string[] | undefined)
+    ?.slice(0, 5)
+    .map((w) => w.replace(/\s+/g, ""))
+    ?? [];
+  // Always append #fyp #viral for discovery; mix in content-relevant tags
+  const uploadHashtags = [...new Set([...sourceHashtags, "fyp", "viral", "parody"])];
+  const caption = buildCaption(brief.premise, uploadHashtags);
+
+  let uploadedVideoUrl: string | null = null;
+  try {
+    const upload = await uploadToTikTok({
+      videoPath: dispatchResult.generatedPath,
+      caption,
+      privacy: "Public",
+    });
+    uploadedVideoUrl = upload.videoUrl;
+    if (upload.posted) {
+      console.log(`[parody] ✓ Uploaded to TikTok${uploadedVideoUrl ? ` → ${uploadedVideoUrl}` : ""}`);
+    } else {
+      console.warn("[parody] TikTok upload did not confirm success — check manually.");
+    }
+  } catch (err) {
+    console.error(`[parody] TikTok upload failed: ${(err as Error).message}`);
+    // Non-fatal: video is generated and saved, just not posted
+  }
+
+  // Step 8: Persist everything to DB
+  const briefId = await persistBrief(
+    brief, editedPath, dispatchResult.taskId, dispatchResult.generatedPath, uploadedVideoUrl
+  );
   console.log(`[parody] ✓ Complete — brief_id=${briefId} | video=${dispatchResult.generatedPath}`);
 
   return {
-    dossierId:     dossier.id,
+    dossierId:        dossier.id,
     briefId,
-    minimaxTaskId: dispatchResult.taskId,
-    generatedPath: dispatchResult.generatedPath,
+    minimaxTaskId:    dispatchResult.taskId,
+    generatedPath:    dispatchResult.generatedPath,
+    uploadedVideoUrl,
   };
 }

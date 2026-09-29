@@ -108,6 +108,8 @@ export const contentBriefs = pgTable("content_briefs", {
   editInstruction:  text("edit_instruction"),
   /** Path to Qwen-Image-Edit output PNG fed to MiniMax. Added by 006_edited_frame.sql */
   editedFramePath:  text("edited_frame_path"),
+  /** TikTok video URL after upload. Added by 007_uploaded_video_url.sql */
+  uploadedVideoUrl: text("uploaded_video_url"),
 });
 
 // ---------------------------------------------------------------------------

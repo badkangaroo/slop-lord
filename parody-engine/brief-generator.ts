@@ -340,3 +340,4 @@ Generate a parody content brief for this trend. Make it ridiculous, weird, and u
     kokoroVoiceTag:  parsed.kokoroVoiceTag ? String(parsed.kokoroVoiceTag) : null,
   };
 }
+
