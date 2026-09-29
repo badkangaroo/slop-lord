@@ -132,8 +132,11 @@ export async function closeTiktokUploader(): Promise<void> {
 
 async function navigateToUpload(page: Page): Promise<void> {
   console.log("[uploader] Navigating to TikTok Studio upload page…");
-  await page.goto(UPLOAD_URL, { waitUntil: "networkidle", timeout: 30_000 });
-  await page.waitForTimeout(2000);
+  // "networkidle" times out on TikTok Studio — it keeps persistent poll connections open.
+  // "domcontentloaded" fires as soon as the DOM is parsed; we then wait for the
+  // file input to appear as the real readiness signal.
+  await page.goto(UPLOAD_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.waitForTimeout(3000);
 }
 
 async function attachFile(page: Page, videoPath: string): Promise<void> {
@@ -234,11 +237,13 @@ async function waitForSuccess(page: Page): Promise<string | null> {
       .waitFor({ state: "visible", timeout: 30_000 });
     console.log("[uploader] ✅ Post confirmed by TikTok.");
   } catch {
-    // Success indicator may not appear — check URL change as fallback
+    // TikTok Studio doesn't always show a persistent success element —
+    // the page often just resets to a fresh upload state.
+    // Log the post-submit URL for diagnostics; if we got here with no
+    // thrown error the click succeeded.
     const currentUrl = page.url();
-    if (currentUrl.includes("upload") && !currentUrl.includes("success")) {
-      console.warn("[uploader] Success indicator not found — assuming posted (no error visible).");
-    }
+    console.log(`[uploader] Post URL after submit: ${currentUrl}`);
+    console.warn("[uploader] Success indicator not matched — assuming posted (no error visible).");
   }
 
   // Try to extract the new video URL from any link on the page

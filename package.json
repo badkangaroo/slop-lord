@@ -8,6 +8,7 @@
     "agent:loop": "tsx scanner/agent.ts --loop",
     "pick": "tsx scripts/pick-target.ts",
     "pick:dry": "tsx scripts/pick-target.ts --dry-run",
+    "upload": "tsx scripts/upload-video.ts",
     "test:login": "tsx scripts/test-login.ts",
     "smoke": "tsx scripts/smoke-test-pipeline.ts",
     "smoke:fast": "tsx scripts/smoke-test-pipeline.ts --skip-video",
