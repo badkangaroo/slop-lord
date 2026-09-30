@@ -12,6 +12,7 @@
     "test:login": "tsx scripts/test-login.ts",
     "smoke": "tsx scripts/smoke-test-pipeline.ts",
     "smoke:fast": "tsx scripts/smoke-test-pipeline.ts --skip-video",
+    "search": "tsx scripts/search-and-run.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts"
   },
