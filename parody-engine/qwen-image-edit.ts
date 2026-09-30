@@ -5,14 +5,15 @@
  * ComfyUI on the LAN, polls for completion, retrieves the edited image,
  * and saves it to ./edited-frames/<videoId>_edited.png.
  *
- * HOW IT WORKS
- * ────────────
- * ComfyUI exposes a REST API at http://<host>:8188:
- *
- *   POST /prompt          — queues a workflow; returns { prompt_id }
- *   GET  /history/{id}    — returns execution state + output filenames
- *   GET  /view?filename=… — retrieves a saved image by filename
- *   POST /upload/image    — uploads an image into ComfyUI's input directory
+ * VERIFICATION LOOP
+ * ─────────────────
+ * After each Qwen edit pass, the result is sent to the SGLang multimodal
+ * server (qwen3.8-27b @ 10.0.1.3:8888) alongside the original frame.
+ * The verifier is asked whether the edit instruction was actually applied.
+ * If not, the edit is retried with the verifier's feedback appended to the
+ * instruction, up to config.sglang.verifyMaxPasses times.
+ * Images sent to the verifier are downscaled to 135×240 (1/4 of 540×960)
+ * for fast inference — full-res is preserved for the actual Qwen edit.
  *
  * WORKFLOW STRUCTURE (native ComfyUI nodes on ComfyUI 0.37.0)
  * ────────────────────────────────────────────────────────────
@@ -26,12 +27,14 @@
  * Node "40"  — EmptyQwenImageLayeredLatentImage  (latent canvas)
  * Node "50"  — KSamplerAdvanced    (sampler)
  * Node "60"  — VAEDecode           (latent → pixel)
- * Node "70"  — SaveImageAdvanced   (save to ComfyUI output dir)
+ * Node "70"  — SaveImage           (save to ComfyUI output dir)
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import { config } from "../config/index.js";
+import { visionComplete } from "./sglang.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -265,7 +268,7 @@ async function queuePrompt(workflow: Record<string, unknown>): Promise<string> {
 // Step 3: Poll /history/{prompt_id} until outputs appear
 // ---------------------------------------------------------------------------
 
-async function pollHistory(promptId: string, timeoutMs = 300_000): Promise<string> {
+async function pollHistory(promptId: string, timeoutMs = 600_000): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   let attempt = 0;
 
@@ -328,11 +331,90 @@ async function retrieveImage(filename: string, outputPath: string): Promise<stri
 }
 
 // ---------------------------------------------------------------------------
+// Step 5: Verification — ask SGLang (qwen3.8-27b) whether the edit landed
+// ---------------------------------------------------------------------------
+
+/**
+ * Downscale a data URI to a small thumbnail for fast vision inference.
+ * Target: 1/4 of the source long-edge, capped at 270px wide to keep the
+ * payload tiny (~10–20 KB) without losing enough detail for edit verification.
+ */
+async function shrinkForVision(dataUri: string): Promise<string> {
+  const b64 = dataUri.split(",", 2)[1];
+  const buf = Buffer.from(b64, "base64");
+
+  const resized = await sharp(buf)
+    .resize({ width: 270, withoutEnlargement: true })
+    .jpeg({ quality: 70 })
+    .toBuffer();
+
+  return `data:image/jpeg;base64,${resized.toString("base64")}`;
+}
+
+interface VerifyResult {
+  passed: boolean;
+  confidence: number;
+  feedback: string;
+}
+
+async function verifyEdit(
+  originalUri: string,
+  editedUri: string,
+  instruction: string,
+): Promise<VerifyResult> {
+  const [origSmall, editSmall] = await Promise.all([
+    shrinkForVision(originalUri),
+    shrinkForVision(editedUri),
+  ]);
+
+  const prompt = `You are a strict image edit verifier.
+Edit instruction: "${instruction}"
+
+First image = ORIGINAL. Second image = EDITED result.
+Reply with JSON only, no prose:
+{"passed": true|false, "confidence": 0.0-1.0, "feedback": "one sentence"}
+"passed" is true only if the PRIMARY subject replacement is clearly visible. Did the edit succeed?`;
+
+  const raw = await visionComplete(prompt, [origSmall, editSmall], {
+    maxTokens: 150,
+    temperature: 0,
+  });
+
+  if (!raw) return { passed: false, confidence: 0, feedback: "Verifier returned no response." };
+
+  // Parse JSON — strip any accidental markdown fences
+  const jsonStr = raw.replace(/```(?:json)?/g, "").trim();
+  try {
+    const parsed = JSON.parse(jsonStr) as Partial<VerifyResult>;
+    return {
+      passed:     !!parsed.passed,
+      confidence: Number(parsed.confidence ?? 0),
+      feedback:   String(parsed.feedback ?? ""),
+    };
+  } catch {
+    // If parsing fails, do a simple keyword check on the raw text
+    const passedHeuristic = /\bpassed\b.*true|\btrue\b.*passed/i.test(raw);
+    return {
+      passed:     passedHeuristic,
+      confidence: 0.5,
+      feedback:   raw.slice(0, 200),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
- * Runs Qwen-Image-Edit on a single frame via ComfyUI.
+ * Runs Qwen-Image-Edit on a single frame via ComfyUI, with SGLang verification.
+ *
+ * After each edit pass the result is sent to qwen3.8-27b (SGLang) alongside
+ * the original to check whether the instruction was actually applied.
+ * If verification fails, the edit is retried with the verifier's feedback
+ * appended to the instruction, up to config.sglang.verifyMaxPasses times.
+ * The best-passing result is returned; if all passes fail verification the
+ * last result is returned anyway (with a warning) so the pipeline continues.
  *
  * @param sourceDataUri   The original frame as a data URI (from thumbnailDataUri)
  * @param editInstruction The LLM-generated edit instruction
@@ -370,25 +452,64 @@ export async function editFrame(
 
   console.log(`\n[qwen-edit] Editing frame for video ${videoId}`);
   console.log(`[qwen-edit] Canvas: ${canvasW}×${canvasH} (from target ${tW}×${tH})`);
-  console.log(`[qwen-edit] Instruction: "${editInstruction.slice(0, 100)}"`);
 
-  // 1. Upload source frame
-  const uploadedName = await uploadImage(sourceDataUri, `slop_src_${videoId}`);
-  console.log(`[qwen-edit] Uploaded source frame → ${uploadedName}`);
+  const maxPasses = config.sglang.verifyMaxPasses;
+  let currentInstruction = editInstruction;
+  let lastDataUri: string | null = null;
+  let lastPromptId = "";
+  let lastOutputPath = outputPath;
 
-  // 2. Build workflow + queue prompt
-  const seed     = config.qwen.seed === -1
-    ? Math.floor(Math.random() * 2 ** 32)
-    : config.qwen.seed;
-  const workflow = buildWorkflow(uploadedName, editInstruction, seed, canvasW, canvasH);
-  const promptId = await queuePrompt(workflow);
-  console.log(`[qwen-edit] Queued → prompt_id=${promptId}`);
+  for (let pass = 1; pass <= maxPasses; pass++) {
+    console.log(`[qwen-edit] Pass ${pass}/${maxPasses} — instruction: "${currentInstruction.slice(0, 100)}"`);
 
-  // 3. Poll history
-  const outputFilename = await pollHistory(promptId);
+    // Use a per-pass filename so we don't collide; promote the winner at the end
+    const passPath = pass === 1
+      ? outputPath.replace(/\.png$/, `_pass1.png`)
+      : outputPath.replace(/\.png$/, `_pass${pass}.png`);
 
-  // 4. Retrieve + save
-  const editedDataUri = await retrieveImage(outputFilename, outputPath);
+    // 1. Upload source frame
+    const uploadedName = await uploadImage(sourceDataUri, `slop_src_${videoId}_p${pass}`);
 
-  return { editedImagePath: outputPath, editedDataUri, promptId };
+    // 2. Queue workflow
+    const seed     = config.qwen.seed === -1
+      ? Math.floor(Math.random() * 2 ** 32)
+      : config.qwen.seed;
+    const workflow = buildWorkflow(uploadedName, currentInstruction, seed, canvasW, canvasH);
+    const promptId = await queuePrompt(workflow);
+    console.log(`[qwen-edit] Queued → prompt_id=${promptId}`);
+
+    // 3. Poll + retrieve
+    const outputFilename = await pollHistory(promptId);
+    const editedDataUri  = await retrieveImage(outputFilename, passPath);
+
+    lastDataUri   = editedDataUri;
+    lastPromptId  = promptId;
+    lastOutputPath = passPath;
+
+    // 4. Verify with SGLang
+    console.log(`[qwen-edit] Verifying pass ${pass} with SGLang…`);
+    const verify = await verifyEdit(sourceDataUri, editedDataUri, editInstruction);
+    console.log(`[qwen-edit] Verify pass ${pass}: passed=${verify.passed} conf=${verify.confidence.toFixed(2)} — "${verify.feedback}"`);
+
+    if (verify.passed) {
+      // Promote to canonical output path
+      fs.copyFileSync(passPath, outputPath);
+      console.log(`[qwen-edit] ✓ Verification passed on pass ${pass} → ${path.basename(outputPath)}`);
+      return { editedImagePath: outputPath, editedDataUri, promptId };
+    }
+
+    if (pass < maxPasses) {
+      // Augment the instruction with the verifier's feedback for the next pass
+      currentInstruction = `${editInstruction}\n\nPrevious attempt failed: ${verify.feedback}. Make the change MORE obvious and dramatic.`;
+    }
+  }
+
+  // All passes exhausted — use the last result and warn
+  console.warn(`[qwen-edit] ⚠ Verification failed after ${maxPasses} passes — using last result anyway.`);
+  fs.copyFileSync(lastOutputPath, outputPath);
+  return {
+    editedImagePath: outputPath,
+    editedDataUri:   lastDataUri!,
+    promptId:        lastPromptId,
+  };
 }

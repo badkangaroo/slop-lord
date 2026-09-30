@@ -30,6 +30,11 @@ interface RuntimeYaml {
     temperatureCreative: number;
     temperatureDeterministic: number;
   };
+  sglang: {
+    baseUrl: string;
+    model: string;
+    verifyMaxPasses: number;
+  };
   comfyui: {
     host: string;
     port: number;

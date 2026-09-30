@@ -19,6 +19,16 @@ lmStudio:
   temperatureCreative: 0.8   # used for brief generation
   temperatureDeterministic: 0.1  # used for classification / scoring
 
+# SGLang multimodal server on the DGX Spark.
+# Used for vision tasks: Qwen-edit verification, thumbnail analysis.
+# Separate from LM Studio — runs qwen3.8-27b which accepts image_url inputs.
+# Responses are in choices[0].message.content (enable_thinking: false).
+sglang:
+  baseUrl: "http://10.0.1.3:8888/v1"
+  model: "qwen3.8-27b-sglang"
+  # Max retry passes for Qwen-edit verification before giving up and passing as-is
+  verifyMaxPasses: 3
+
 comfyui:
   host: "10.0.1.3"
   port: 8188
