@@ -48,7 +48,9 @@ async function callVisionBackend(
   const body: Record<string, unknown> = {
     model:       backend.model,
     messages:    [{ role: "user", content }],
-    max_tokens:  opts.maxTokens  ?? 256,
+    // Reasoning models need headroom for the <think>...</think> block before the answer.
+    // 1024 covers ~200 tokens of reasoning + the actual response.
+    max_tokens:  opts.maxTokens  ?? 1024,
     temperature: opts.temperature ?? 0,
   };
 

@@ -214,7 +214,7 @@ export async function generateBrief(
   if (thumbnailDataUri) {
     console.log(`[brief-generator] Sending thumbnail to ${config.inference.vision.model} for visual analysis…`);
     const visionPrompt = `${VISION_SYSTEM}\n\nDescribe this TikTok frame and propose a bizarre parody reimagining.`;
-    visualDescription = await visionComplete(visionPrompt, [thumbnailDataUri], { temperature: 0.9, maxTokens: 512 });
+    visualDescription = await visionComplete(visionPrompt, [thumbnailDataUri], { temperature: 0.9, maxTokens: 1500 });
     if (visualDescription) {
       console.log(`[brief-generator] Visual description: ${visualDescription.slice(0, 100)}…`);
     } else {
@@ -278,7 +278,7 @@ export async function generateBriefFromAnalysis(
   if (analysis.thumbnailDataUri) {
     console.log(`[brief-generator] Sending thumbnail to ${config.inference.vision.model} for visual analysis…`);
     const visionPrompt = `${VISION_SYSTEM}\n\nDescribe this TikTok frame and propose a bizarre parody reimagining.`;
-    visualDescription = await visionComplete(visionPrompt, [analysis.thumbnailDataUri], { temperature: 0.9, maxTokens: 512 });
+    visualDescription = await visionComplete(visionPrompt, [analysis.thumbnailDataUri], { temperature: 0.9, maxTokens: 1500 });
     if (visualDescription) {
       console.log(`[brief-generator] Visual description: ${visualDescription.slice(0, 120)}…`);
     } else {

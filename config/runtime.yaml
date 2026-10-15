@@ -47,15 +47,15 @@ inference:
     temperatureDeterministic: 0.1   # classification, scoring
 
   vision:
-    baseUrl: "http://10.0.1.3:8888/v1"
-    model:   "qwen3.8-27b-sglang"
-    # SGLang: disable chain-of-thought for fast direct answers
-    enableThinking: false
+    baseUrl: "http://10.0.1.8:1234/v1"
+    model:   "qwen3.8-27b"
+    # LM Studio reasoning model — answer comes in reasoning_content when content is empty
+    isReasoningModel: true
 
   verify:
-    baseUrl: "http://10.0.1.3:8888/v1"
-    model:   "qwen3.8-27b-sglang"
-    enableThinking: false
+    baseUrl: "http://10.0.1.8:1234/v1"
+    model:   "qwen3.8-27b"
+    isReasoningModel: true
     # Max Qwen-edit retry passes before accepting the last result as-is
     maxPasses: 3
 

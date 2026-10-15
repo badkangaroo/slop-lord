@@ -376,7 +376,7 @@ Reply with JSON only, no prose:
 "passed" is true only if the PRIMARY subject replacement is clearly visible. Did the edit succeed?`;
 
   const raw = await verifyComplete(prompt, [origSmall, editSmall], {
-    maxTokens: 150,
+    maxTokens: 1024,   // reasoning model needs room to think before emitting JSON
     temperature: 0,
   });
 
