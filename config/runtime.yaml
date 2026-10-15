@@ -71,7 +71,7 @@ sglang:
   verifyMaxPasses: 3
 
 comfyui:
-  host: "10.0.1.3"
+  host: "10.0.1.99"
   port: 8188
   # Named style presets — these must match workflow names in your ComfyUI instance.
   # Add / remove presets here; the web UI Style Studio dropdown reads this list.
