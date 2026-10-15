@@ -21,6 +21,7 @@
  */
 
 import { complete, completeWithImage } from "./llm.js";
+import { visionComplete } from "./sglang.js";
 import { config } from "../config/index.js";
 import type { TrendDossier } from "../db/schema.js";
 import type { VideoAnalysis } from "../harness/video-analyzer.js";
@@ -211,13 +212,9 @@ export async function generateBrief(
   // Step 1: Visual analysis of thumbnail (if available)
   let visualDescription: string | null = null;
   if (thumbnailDataUri) {
-    console.log("[brief-generator] Sending thumbnail to LM Studio for visual analysis…");
-    visualDescription = await completeWithImage(
-      VISION_SYSTEM,
-      "Describe this TikTok frame and propose a bizarre parody reimagining.",
-      thumbnailDataUri,
-      { temperature: 0.9, maxTokens: 512 }
-    );
+    console.log(`[brief-generator] Sending thumbnail to ${config.inference.vision.model} for visual analysis…`);
+    const visionPrompt = `${VISION_SYSTEM}\n\nDescribe this TikTok frame and propose a bizarre parody reimagining.`;
+    visualDescription = await visionComplete(visionPrompt, [thumbnailDataUri], { temperature: 0.9, maxTokens: 512 });
     if (visualDescription) {
       console.log(`[brief-generator] Visual description: ${visualDescription.slice(0, 100)}…`);
     } else {
@@ -279,13 +276,9 @@ export async function generateBriefFromAnalysis(
   // Step 1: Vision call on the thumbnail
   let visualDescription: string | null = null;
   if (analysis.thumbnailDataUri) {
-    console.log("[brief-generator] Sending thumbnail to LM Studio for visual analysis…");
-    visualDescription = await completeWithImage(
-      VISION_SYSTEM,
-      "Describe this TikTok frame and propose a bizarre parody reimagining.",
-      analysis.thumbnailDataUri,
-      { temperature: 0.9, maxTokens: 512 }
-    );
+    console.log(`[brief-generator] Sending thumbnail to ${config.inference.vision.model} for visual analysis…`);
+    const visionPrompt = `${VISION_SYSTEM}\n\nDescribe this TikTok frame and propose a bizarre parody reimagining.`;
+    visualDescription = await visionComplete(visionPrompt, [analysis.thumbnailDataUri], { temperature: 0.9, maxTokens: 512 });
     if (visualDescription) {
       console.log(`[brief-generator] Visual description: ${visualDescription.slice(0, 120)}…`);
     } else {

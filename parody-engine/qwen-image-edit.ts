@@ -34,7 +34,7 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { config } from "../config/index.js";
-import { visionComplete } from "./sglang.js";
+import { verifyComplete } from "./sglang.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -375,7 +375,7 @@ Reply with JSON only, no prose:
 {"passed": true|false, "confidence": 0.0-1.0, "feedback": "one sentence"}
 "passed" is true only if the PRIMARY subject replacement is clearly visible. Did the edit succeed?`;
 
-  const raw = await visionComplete(prompt, [origSmall, editSmall], {
+  const raw = await verifyComplete(prompt, [origSmall, editSmall], {
     maxTokens: 150,
     temperature: 0,
   });

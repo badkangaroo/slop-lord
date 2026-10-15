@@ -1,40 +1,38 @@
 /**
  * parody-engine/sglang.ts
  *
- * Thin client for the SGLang multimodal server on the DGX Spark (10.0.1.3:8888).
- * Model: qwen3.8-27b-sglang — accepts image_url inputs, responds in content
- * (not reasoning_content) when enable_thinking is false.
+ * Vision inference client — routes to the correct backend based on
+ * config.inference.vision / config.inference.verify.
  *
- * Used exclusively for vision verification tasks — not for text generation.
+ * Two exported functions:
+ *   visionComplete()  — thumbnail analysis, brief image context (inference.vision)
+ *   verifyComplete()  — Qwen-edit pass/fail judge (inference.verify)
+ *
+ * Both accept image_url arrays. The backend is expected to respond in
+ * choices[0].message.content (enable_thinking: false where supported).
  */
 
 import { config } from "../config/index.js";
+import type { InferenceBackend } from "../config/index.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SglangOptions {
+export interface VisionOptions {
   temperature?: number;
   maxTokens?: number;
 }
 
 // ---------------------------------------------------------------------------
-// Core
+// Core — shared by both roles
 // ---------------------------------------------------------------------------
 
-/**
- * Send a vision prompt to SGLang with one or two images.
- * Returns the text response, or null on error.
- *
- * @param userText     The text part of the prompt
- * @param imageUris    Array of data URIs (1 or 2 images)
- * @param opts
- */
-export async function visionComplete(
+async function callVisionBackend(
+  backend: InferenceBackend,
   userText: string,
   imageUris: string[],
-  opts: SglangOptions = {}
+  opts: VisionOptions = {}
 ): Promise<string | null> {
   const content: Array<
     | { type: "image_url"; image_url: { url: string } }
@@ -47,42 +45,83 @@ export async function visionComplete(
     { type: "text" as const, text: userText },
   ];
 
-  const body = {
-    model:       config.sglang.model,
+  const body: Record<string, unknown> = {
+    model:       backend.model,
     messages:    [{ role: "user", content }],
     max_tokens:  opts.maxTokens  ?? 256,
     temperature: opts.temperature ?? 0,
-    // Disable chain-of-thought — we want fast direct answers, not reasoning traces
-    chat_template_kwargs: { enable_thinking: false },
   };
+
+  // SGLang / Qwen3: disable chain-of-thought for fast direct answers
+  if (backend.enableThinking === false) {
+    body.chat_template_kwargs = { enable_thinking: false };
+  }
+
+  const label = `[sglang:${backend.model.split("-")[0]}]`;
 
   let resp: Response;
   try {
-    resp = await fetch(`${config.sglang.baseUrl}/chat/completions`, {
+    resp = await fetch(`${backend.baseUrl}/chat/completions`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(body),
     });
   } catch (err) {
-    console.error(`[sglang] Network error: ${(err as Error).message}`);
+    console.error(`${label} Network error: ${(err as Error).message}`);
     return null;
   }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    console.error(`[sglang] ${resp.status}: ${text.slice(0, 200)}`);
+    console.error(`${label} ${resp.status}: ${text.slice(0, 200)}`);
     return null;
   }
 
   const json = await resp.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
     error?: { message?: string };
   };
 
   if (json.error) {
-    console.error(`[sglang] Error: ${json.error.message}`);
+    console.error(`${label} Error: ${json.error.message}`);
     return null;
   }
 
-  return json.choices?.[0]?.message?.content?.trim() ?? null;
+  const msg = json.choices?.[0]?.message;
+  // Prefer content; fall back to reasoning_content for models that think first
+  return msg?.content?.trim() || msg?.reasoning_content?.trim() || null;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Vision completion for thumbnail analysis and brief image context.
+ * Uses config.inference.vision backend.
+ *
+ * @param userText   The text prompt
+ * @param imageUris  One or more data URIs
+ */
+export async function visionComplete(
+  userText: string,
+  imageUris: string[],
+  opts: VisionOptions = {}
+): Promise<string | null> {
+  return callVisionBackend(config.inference.vision, userText, imageUris, opts);
+}
+
+/**
+ * Verification completion for Qwen-edit pass/fail judging.
+ * Uses config.inference.verify backend (may be same endpoint as vision).
+ *
+ * @param userText   The verification prompt (includes instruction + JSON format request)
+ * @param imageUris  [original, edited] data URIs
+ */
+export async function verifyComplete(
+  userText: string,
+  imageUris: string[],
+  opts: VisionOptions = {}
+): Promise<string | null> {
+  return callVisionBackend(config.inference.verify, userText, imageUris, opts);
 }

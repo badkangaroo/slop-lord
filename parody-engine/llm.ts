@@ -52,11 +52,12 @@ async function chatComplete(
   messages: ChatMessage[],
   opts: LLMOptions = {}
 ): Promise<string | null> {
-  const url = `${config.lmStudio.baseUrl}/chat/completions`;
+  const backend = config.inference.text;
+  const url = `${backend.baseUrl}/chat/completions`;
   const body = {
-    model:       config.lmStudio.model,
+    model:       backend.model,
     messages,
-    temperature: opts.temperature ?? config.lmStudio.temperatureCreative,
+    temperature: opts.temperature ?? backend.temperatureCreative ?? config.lmStudio.temperatureCreative,
     max_tokens:  opts.maxTokens  ?? 2048,
     stream:      false,
   };
@@ -172,7 +173,7 @@ export async function completeWithImage(
  */
 export async function listModels(): Promise<string[]> {
   try {
-    const resp = await fetch(`${config.lmStudio.baseUrl}/models`);
+    const resp = await fetch(`${config.inference.text.baseUrl}/models`);
     if (!resp.ok) return [];
     const json = await resp.json() as { data?: Array<{ id: string }> };
     return json.data?.map((m) => m.id) ?? [];

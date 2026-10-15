@@ -16,6 +16,17 @@ const CONFIG_PATH = path.resolve(__dirname, "runtime.yaml");
 // ---------------------------------------------------------------------------
 // Raw shape from YAML
 // ---------------------------------------------------------------------------
+
+export interface InferenceBackend {
+  baseUrl: string;
+  model: string;
+  isReasoningModel?: boolean;
+  enableThinking?: boolean;
+  temperatureCreative?: number;
+  temperatureDeterministic?: number;
+  maxPasses?: number;
+}
+
 interface RuntimeYaml {
   browser: {
     cdpPort: number;
@@ -24,6 +35,12 @@ interface RuntimeYaml {
     cdpReadyTimeoutSec: number;
     humanIdleSec: number;
   };
+  inference: {
+    text:   InferenceBackend;
+    vision: InferenceBackend;
+    verify: InferenceBackend;
+  };
+  // Legacy — kept until all callers migrate to inference.*
   lmStudio: {
     baseUrl: string;
     model: string;
@@ -106,8 +123,23 @@ function load(): RuntimeYaml {
   if (env.BROWSER_CDP_HOST) base.browser.cdpHost = env.BROWSER_CDP_HOST;
   if (env.CHROME_PROFILE_DIR) base.browser.profileDir = env.CHROME_PROFILE_DIR;
 
-  if (env.LM_STUDIO_BASE_URL) base.lmStudio.baseUrl = env.LM_STUDIO_BASE_URL;
-  if (env.LM_STUDIO_MODEL) base.lmStudio.model = env.LM_STUDIO_MODEL;
+  // inference.* overrides — each role has independent URL + model overrides
+  if (env.INFERENCE_TEXT_URL)    base.inference.text.baseUrl = env.INFERENCE_TEXT_URL;
+  if (env.INFERENCE_TEXT_MODEL)  base.inference.text.model   = env.INFERENCE_TEXT_MODEL;
+  if (env.INFERENCE_VISION_URL)  base.inference.vision.baseUrl = env.INFERENCE_VISION_URL;
+  if (env.INFERENCE_VISION_MODEL) base.inference.vision.model  = env.INFERENCE_VISION_MODEL;
+  if (env.INFERENCE_VERIFY_URL)  base.inference.verify.baseUrl = env.INFERENCE_VERIFY_URL;
+  if (env.INFERENCE_VERIFY_MODEL) base.inference.verify.model  = env.INFERENCE_VERIFY_MODEL;
+
+  // Legacy lmStudio overrides — also mirror into inference.text so both paths see the change
+  if (env.LM_STUDIO_BASE_URL) {
+    base.lmStudio.baseUrl       = env.LM_STUDIO_BASE_URL;
+    base.inference.text.baseUrl = env.LM_STUDIO_BASE_URL;
+  }
+  if (env.LM_STUDIO_MODEL) {
+    base.lmStudio.model       = env.LM_STUDIO_MODEL;
+    base.inference.text.model = env.LM_STUDIO_MODEL;
+  }
 
   if (env.COMFYUI_HOST) base.comfyui.host = env.COMFYUI_HOST;
   if (env.COMFYUI_PORT) base.comfyui.port = parseInt(env.COMFYUI_PORT, 10);
