@@ -110,6 +110,8 @@ function buildWorkflow(
 ): Record<string, unknown> {
   const cfg    = config.minimax;
   const length = snapToH3Grid(durationSec ?? cfg.duration);
+  const unetName = cfg.enableTurbo ? cfg.turboUnetName : cfg.unetName;
+  const steps    = cfg.enableTurbo ? cfg.turboSteps    : cfg.steps;
 
   return {
     // ── Source first frame ────────────────────────────────────────────────
@@ -121,7 +123,7 @@ function buildWorkflow(
     // ── Model loaders ─────────────────────────────────────────────────────
     "2": {
       class_type: "UNETLoader",
-      inputs: { unet_name: cfg.unetName, weight_dtype: "default" },
+      inputs: { unet_name: unetName, weight_dtype: "default" },
     },
     "3": {
       class_type: "CLIPLoader",
@@ -166,7 +168,7 @@ function buildWorkflow(
       inputs: {
         model:     ["2", 0],
         scheduler: "simple",
-        steps:     cfg.turboSteps,   // 20 in non-turbo config
+        steps,
         denoise:   1.0,
       },
     },

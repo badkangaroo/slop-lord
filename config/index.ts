@@ -85,11 +85,13 @@ interface RuntimeYaml {
   };
   minimax: {
     unetName: string;
+    turboUnetName: string;
     clipName: string;
     vaeName: string;
     audioVaeName: string;
     loraName: string;
     enableTurbo: boolean;
+    steps: number;
     turboSteps: number;
     turboStrength: number;
     width: number;
