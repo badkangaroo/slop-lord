@@ -39,9 +39,7 @@ browser:
 inference:
   text:
     baseUrl: "http://10.0.1.8:1234/v1"
-    model:   "eclipsed-phoenix-26b-a4b-heretic"
-    # Reasoning models put the final answer in reasoning_content, not content.
-    # Set to true if the loaded model is a reasoning/thinking model.
+    model:   "qwen3.8-27b"
     isReasoningModel: true
     temperatureCreative:      0.8   # brief generation, picker
     temperatureDeterministic: 0.1   # classification, scoring
@@ -63,7 +61,7 @@ inference:
 # These will be removed once all callers use inference.* directly.
 lmStudio:
   baseUrl: "http://10.0.1.8:1234/v1"
-  model: "eclipsed-phoenix-26b-a4b-heretic"
+  model: "qwen3.8-27b"
   temperatureCreative: 0.8
   temperatureDeterministic: 0.1
 
