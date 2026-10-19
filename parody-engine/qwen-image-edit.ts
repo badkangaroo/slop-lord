@@ -7,8 +7,8 @@
  *
  * VERIFICATION LOOP
  * ─────────────────
- * After each Qwen edit pass, the result is sent to the SGLang multimodal
- * server (qwen3.8-27b @ 10.0.1.3:8888) alongside the original frame.
+ * After each Qwen edit pass, the result is sent to the desktop vision model
+ * (inference.verify, currently 10.0.1.8:1234) alongside the original frame.
  * The verifier is asked whether the edit instruction was actually applied.
  * If not, the edit is retried with the verifier's feedback appended to the
  * instruction, up to config.sglang.verifyMaxPasses times.
@@ -407,9 +407,9 @@ Reply with JSON only, no prose:
 // ---------------------------------------------------------------------------
 
 /**
- * Runs Qwen-Image-Edit on a single frame via ComfyUI, with SGLang verification.
+ * Runs Qwen-Image-Edit on a single frame via ComfyUI, with desktop-LLM verification.
  *
- * After each edit pass the result is sent to qwen3.8-27b (SGLang) alongside
+ * After each edit pass the result is sent to inference.verify alongside
  * the original to check whether the instruction was actually applied.
  * If verification fails, the edit is retried with the verifier's feedback
  * appended to the instruction, up to config.sglang.verifyMaxPasses times.

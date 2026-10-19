@@ -111,6 +111,18 @@ async function transcodeToSD(inputPath: string, outputPath: string): Promise<voi
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Writes the first video frame to a PNG next to the source file. */
+export async function extractFirstFrame(videoPath: string): Promise<string> {
+  const framePath = videoPath.replace(/\.mp4$/i, ".frame.png");
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-i", videoPath,
+    "-frames:v", "1",
+    framePath,
+  ]);
+  return framePath;
+}
+
 export interface DownloadResult {
   videoPath: string;    // absolute path to the 480p .mp4
   fileSizeBytes: number;

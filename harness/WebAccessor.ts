@@ -27,6 +27,7 @@ import type { VideoMetadata, TrendPageResult } from "./stagehand.js";
 // Dynamically imported to avoid loading both adapters at startup
 import * as Stagehand from "./stagehand.js";
 import * as PlaywrightAdapter from "./playwright.js";
+import { isObuInstalled, runOnActiveTab } from "./open-browser.js";
 
 // ---------------------------------------------------------------------------
 // Search types
@@ -260,6 +261,17 @@ export const WebAccessor = {
       () => Stagehand.dismissModals(),
       () => PlaywrightAdapter.dismissModals()
     );
+  },
+
+  /**
+   * Run JavaScript in the tab already open in Chrome.
+   * `code` may use `browser` and `tab`. A new tab is opened only if none exist.
+   * Returns null when the CLI is not installed so callers can use CDP.
+   */
+  async runJs(code: string): Promise<string | null> {
+    await pauseGuard.check();
+    if (!isObuInstalled()) return null;
+    return runOnActiveTab(code);
   },
 };
 

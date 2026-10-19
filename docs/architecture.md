@@ -27,7 +27,7 @@
 │            │                                            │            │
 │  ┌─────────▼──────────────────┐              ┌──────────▼─────────┐ │
 │  │  Live Chrome Browser       │              │   LAN → ComfyUI    │ │
-│  │  --remote-debugging-port   │              │   10.0.1.3:8188    │ │
+│  │  --remote-debugging-port   │              │   10.0.1.99:8188   │ │
 │  │  =9222                     │              └────────────────────┘ │
 │  │  (human logged in to       │                                     │
 │  │   TikTok; agent attaches)  │                                     │
@@ -35,8 +35,8 @@
 └─────────────────────────────────────────────────────────────────────┘
                                          ▲
                               LAN Services (separate machines)
-                              LM Studio @ 10.0.1.8:1234/v1
-                              ComfyUI   @ 10.0.1.3:8188
+                              LM Studio (desktop) @ 10.0.1.8:1234/v1
+                              ComfyUI (Qwen + MiniMax) @ 10.0.1.99:8188
 ```
 
 ---
@@ -115,7 +115,7 @@ Postgres: content_briefs (dispatched=false)
 parody-engine/comfyui-dispatch.ts
     │
     ├── Builds ComfyUI workflow JSON per shot
-    ├── POST http://10.0.1.3:8188/api/prompt
+    ├── POST http://10.0.1.99:8188/api/prompt
     │
     ▼
 Postgres: content_briefs.dispatch_job_id = <comfyui_prompt_id>
@@ -123,7 +123,7 @@ Postgres: content_briefs.dispatch_job_id = <comfyui_prompt_id>
     │
     ▼
 Web UI /jobs  →  polls GET /api/briefs/:id/status
-               →  proxies GET http://10.0.1.3:8188/api/history/<job_id>
+               →  proxies GET http://10.0.1.99:8188/api/history/<job_id>
 ```
 
 ---
@@ -184,4 +184,4 @@ The browser is **never headless**. The agent operates a window the human can see
 | `3030` | `0.0.0.0` (LAN) | Web UI |
 | `9222` | `localhost` | Chrome CDP (remote debugging) |
 | `1234` | LAN `10.0.1.8` | LM Studio |
-| `8188` | LAN `10.0.1.3` | ComfyUI |
+| `8188` | LAN `10.0.1.99` | ComfyUI (Qwen-Image-Edit + MiniMax H3) |

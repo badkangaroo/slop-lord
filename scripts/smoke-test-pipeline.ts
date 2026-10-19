@@ -9,8 +9,8 @@
  *   Stage 1 — Chrome CDP reachability
  *   Stage 2 — analyzeVideo(): thumbnail + transcript + stats from a live TikTok URL
  *   Stage 3 — LM Studio reachability + generateBriefFromAnalysis() (vision + brief)
- *   Stage 4 — Qwen-Image-Edit via ComfyUI (10.0.1.3:8188): edit the first frame
- *   Stage 5 — MiniMax H3 via ComfyUI (10.0.1.3:8188): generate the video
+ *   Stage 4 — Qwen-Image-Edit via ComfyUI (config.comfyui, 10.0.1.99:8188)
+ *   Stage 5 — MiniMax H3 via the same ComfyUI: generate the video
  *
  * USAGE:
  *   # 1. Start Chrome with a TikTok session already logged in
@@ -39,6 +39,7 @@ import { editFrame } from "../parody-engine/qwen-image-edit.js";
 import { dispatchToMinimax } from "../parody-engine/minimax-dispatch.js";
 import type { VideoAnalysis } from "../harness/video-analyzer.js";
 import type { ContentBrief } from "../parody-engine/brief-generator.js";
+import { config } from "../config/index.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -222,7 +223,7 @@ async function stage4_qwen(
   analysis: VideoAnalysis,
   brief: ContentBrief
 ): Promise<{ editedDataUri: string; editedImagePath: string } | null> {
-  bar("Stage 4 — Qwen-Image-Edit (ComfyUI @ 10.0.1.3:8188)");
+  bar(`Stage 4 — Qwen-Image-Edit (ComfyUI @ ${config.comfyui.host}:${config.comfyui.port})`);
 
   if (SKIP_QWEN || SKIP_VIDEO) {
     console.log(`${SKIP}  --skip-qwen or --skip-video flag set.`);
@@ -264,7 +265,7 @@ async function stage5_minimax(
   brief: ContentBrief,
   editResult: { editedDataUri: string } | null
 ): Promise<void> {
-  bar("Stage 5 — MiniMax H3 I2V (ComfyUI @ 10.0.1.3:8188)");
+  bar(`Stage 5 — MiniMax H3 I2V (ComfyUI @ ${config.comfyui.host}:${config.comfyui.port})`);
 
   if (SKIP_MINIMAX || SKIP_VIDEO) {
     console.log(`${SKIP}  --skip-minimax or --skip-video flag set.`);

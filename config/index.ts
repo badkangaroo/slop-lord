@@ -28,6 +28,11 @@ export interface InferenceBackend {
 }
 
 interface RuntimeYaml {
+  openBrowser: {
+    enabled: boolean;
+    bin: string;
+    browser: string;
+  };
   browser: {
     cdpPort: number;
     cdpHost: string;
@@ -111,15 +116,22 @@ interface RuntimeYaml {
 function load(): RuntimeYaml {
   const raw = fs.readFileSync(CONFIG_PATH, "utf8");
   const base = yaml.load(raw) as RuntimeYaml;
+  const env = process.env;
 
   // Expand ~ in profileDir
+  base.openBrowser = base.openBrowser ?? {
+    enabled: true,
+    bin: "~/.obu/bin/obu",
+    browser: "chrome",
+  };
+  base.openBrowser.bin = base.openBrowser.bin.replace(/^~/, process.env.HOME ?? "~");
+  if (env.OBU_BIN) base.openBrowser.bin = env.OBU_BIN;
+  if (env.OBU_ENABLED) base.openBrowser.enabled = env.OBU_ENABLED !== "0";
+
   base.browser.profileDir = base.browser.profileDir.replace(
     /^~/,
     process.env.HOME ?? "~"
   );
-
-  // Env overrides — only apply when the variable is actually set
-  const env = process.env;
 
   if (env.BROWSER_CDP_PORT) base.browser.cdpPort = parseInt(env.BROWSER_CDP_PORT, 10);
   if (env.BROWSER_CDP_HOST) base.browser.cdpHost = env.BROWSER_CDP_HOST;

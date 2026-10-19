@@ -3,6 +3,14 @@
 # Environment variables with matching names override these values at startup.
 # Never hardcode addresses in source files — always read from this config.
 
+# Logged-in Chrome via the open-browser-use extension (no debug port).
+# The pipeline talks to `obu mcp stdio`. CDP on browser.cdpPort stays the fallback
+# until the extension is loaded and ~/.obu/bin/obu exists.
+openBrowser:
+  enabled: true
+  bin: "~/.obu/bin/obu"
+  browser: "chrome"
+
 browser:
   cdpPort: 9222
   cdpHost: "localhost"
@@ -30,6 +38,9 @@ browser:
 #            Must accept two image_url inputs in one message.
 #            Can be the same endpoint as vision.
 #
+# While the DGX Spark is busy training, all three roles live on the desktop
+# LM Studio box (10.0.1.8:1234). Image edit and video stay on ComfyUI
+# (comfyui.host, currently 10.0.1.99:8188), which can run beside training.
 # To swap a backend: change baseUrl + model here, nothing else.
 # Env var overrides (all optional):
 #   INFERENCE_TEXT_URL       INFERENCE_TEXT_MODEL
@@ -65,6 +76,8 @@ lmStudio:
   temperatureCreative: 0.8
   temperatureDeterministic: 0.1
 
+# Parked Spark endpoint. Edit verification currently uses inference.verify
+# on the desktop (10.0.1.8:1234). verifyMaxPasses is still read by qwen-image-edit.
 sglang:
   baseUrl: "http://10.0.1.3:8888/v1"
   model: "qwen3.8-27b-sglang"
@@ -119,7 +132,7 @@ scanner:
   maxCandidatesPerRun: 50
 
 qwen:
-  # Qwen-Image-Edit via ComfyUI on the LAN DGX Spark (10.0.1.3:8188).
+  # Qwen-Image-Edit via ComfyUI at comfyui.host (10.0.1.99:8188).
   # These are the actual filenames present on that instance (confirmed via /object_info).
   unetName:  "qwen_image_edit_2511_bf16.safetensors"
   clipName:  "qwen_2.5_vl_7b_fp8_scaled.safetensors"
@@ -133,6 +146,19 @@ qwen:
   outputDir: "./edited-frames"
 
 minimax:
+  # Character swap uses Ref2VA (reference image + source video), not FL2VA.
+  # Workflow: parody-engine/workflows/minimax_h3_ref2va_character_swap_api.json
+  # Spark copy: ~/comfyui/user/default/workflows/minimax_h3_ref2va_character_swap.json
+  ref2va:
+    unetName: "minimax_h3_ref2va_pruned-Q8_0.gguf"
+    loraName: "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors"
+    width: 544
+    height: 960
+    length: 175         # 17n+5, 7.3s at 24fps. The 544p turbo LoRA is the tested size.
+    shiftVideo: 12
+    shiftAudio: 3
+    steps: 4
+
   # MiniMax H3 I2V via ComfyUI on 10.0.1.99:8188
   # No API key required — local inference only.
   # Confirmed present via /object_info on 2026-09-29.

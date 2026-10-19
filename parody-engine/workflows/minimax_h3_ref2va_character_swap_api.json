@@ -1,0 +1,215 @@
+{
+ "1": {
+  "class_type": "UnetLoaderGGUF",
+  "inputs": {
+   "unet_name": "minimax_h3_ref2va_pruned-Q8_0.gguf"
+  }
+ },
+ "2": {
+  "class_type": "LoraLoaderModelOnly",
+  "inputs": {
+   "model": [
+    "1",
+    0
+   ],
+   "lora_name": "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+   "strength_model": 1.0
+  }
+ },
+ "3": {
+  "class_type": "MiniMaxH3SigmaShift",
+  "inputs": {
+   "model": [
+    "2",
+    0
+   ],
+   "shift_video": 12.0,
+   "shift_audio": 3.0
+  }
+ },
+ "4": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+   "type": "minimax",
+   "device": "default"
+  }
+ },
+ "5": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+  }
+ },
+ "6": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+  }
+ },
+ "7": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "idle.png"
+  }
+ },
+ "8": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "dancer_field_pose.mp4"
+  }
+ },
+ "9": {
+  "class_type": "GetVideoComponents",
+  "inputs": {
+   "video": [
+    "8",
+    0
+   ]
+  }
+ },
+ "10": {
+  "class_type": "MiniMaxH3ReferenceToVideo",
+  "inputs": {
+   "clip": [
+    "4",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ],
+   "audio_vae": [
+    "6",
+    0
+   ],
+   "prompt": "subject_definitions:\n<Subject 1> is the anime maid character from <Picture 1>: long straight blonde hair, green eyes, white frilled maid headband, black dress with black capelet and black bow, long white frilled apron, flat cel-shaded anime style.\n<Video 1> is the original video to edit: a dancer performing in an open grassy field; its camera, background, lighting and the dancer's full-body motion are kept.\nsummary:\nEdit <Video 1> by replacing the dancer with <Subject 1>. Everything else in <Video 1> stays the same.\nretention_analysis:\n<Subject 1> fully replaces the person in <Video 1> for the whole clip and keeps her appearance from <Picture 1>. The dance motion, timing, body positions, camera framing, field background and lighting of <Video 1> are fully preserved.\ndetailed_description:\n[Shot 1] The same field and camera framing as <Video 1>. <Subject 1>, the blonde anime maid, performs exactly the dancer's moves from <Video 1>, her apron and long blonde hair swinging with each step. She is rendered as a 2D cel-shaded cartoon character composited into the real field. No other people appear.\noverall_soundscape:\nLight wind over the grass, soft footsteps on the ground, fabric rustle.\nnon_diegetic_music:\nUpbeat playful pop beat matching the dance rhythm.",
+   "width": 960,
+   "height": 544,
+   "length": 73,
+   "ref_image_size": "match",
+   "ref_images.ref_image_1": [
+    "7",
+    0
+   ],
+   "ref_videos.ref_video_1": [
+    "9",
+    0
+   ]
+  }
+ },
+ "11": {
+  "class_type": "BasicGuider",
+  "inputs": {
+   "model": [
+    "3",
+    0
+   ],
+   "conditioning": [
+    "10",
+    0
+   ]
+  }
+ },
+ "12": {
+  "class_type": "KSamplerSelect",
+  "inputs": {
+   "sampler_name": "euler"
+  }
+ },
+ "13": {
+  "class_type": "BasicScheduler",
+  "inputs": {
+   "model": [
+    "3",
+    0
+   ],
+   "scheduler": "simple",
+   "steps": 4,
+   "denoise": 1.0
+  }
+ },
+ "14": {
+  "class_type": "RandomNoise",
+  "inputs": {
+   "noise_seed": 42
+  }
+ },
+ "15": {
+  "class_type": "SamplerCustomAdvanced",
+  "inputs": {
+   "noise": [
+    "14",
+    0
+   ],
+   "guider": [
+    "11",
+    0
+   ],
+   "sampler": [
+    "12",
+    0
+   ],
+   "sigmas": [
+    "13",
+    0
+   ],
+   "latent_image": [
+    "10",
+    1
+   ]
+  }
+ },
+ "16": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "15",
+    0
+   ],
+   "vae": [
+    "5",
+    0
+   ]
+  }
+ },
+ "17": {
+  "class_type": "VAEDecodeAudio",
+  "inputs": {
+   "samples": [
+    "15",
+    0
+   ],
+   "vae": [
+    "6",
+    0
+   ]
+  }
+ },
+ "18": {
+  "class_type": "CreateVideo",
+  "inputs": {
+   "images": [
+    "16",
+    0
+   ],
+   "audio": [
+    "17",
+    0
+   ],
+   "fps": 24.0
+  }
+ },
+ "19": {
+  "class_type": "SaveVideo",
+  "inputs": {
+   "video": [
+    "18",
+    0
+   ],
+   "filename_prefix": "video/MiniMax_H3/ref2va_swap",
+   "format": "auto",
+   "codec": "auto"
+  }
+ }
+}

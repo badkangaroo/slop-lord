@@ -74,14 +74,23 @@ All services run via `docker compose up -d` from the repo root. See `docker-comp
 
 ---
 
+## Logged-in browser — open-browser-use
+
+The scanner prefers the [open-browser-use](https://github.com/open-browser-use/open-browser-use) extension so it can drive the Chrome profile that is already signed into TikTok, without `--remote-debugging-port`. `harness/open-browser.ts` talks to `~/.obu/bin/obu mcp stdio`. The SDK cannot be imported into this repo. Chrome CDP (`browser.cdpPort`) remains the fallback used by the feed scroller, video analyzer, and uploader until those modules are moved onto `WebAccessor.runJs()`.
+
+1. Download the extension zip from the latest GitHub release and load it unpacked in the TikTok Chrome profile.
+2. Install the CLI (`curl -fsSL https://github.com/open-browser-use/open-browser-use/releases/latest/download/install.sh | sh`).
+3. Open the extension popup until it says Connected, then run `npm run obu:status`.
+4. Paste the popup **Copy for agent** handoff here so Cursor's MCP entry can be written with the exact extension id.
+
 ## LAN Services (not in Docker)
 
 These run on other machines on the network and are accessed over the LAN.
 
 | Service | Address | Role |
 |---------|---------|------|
-| **LM Studio** | `http://10.0.1.8:1234/v1` | OpenAI-compatible LLM API — powers the Parody Engine brief generator |
-| **ComfyUI** | `http://10.0.1.3:8188` | Image/video generation — receives ContentBrief shots as workflow prompts |
+| **LM Studio (desktop)** | `http://10.0.1.8:1234/v1` | Text, vision, and edit verification while the Spark is training |
+| **ComfyUI** | `http://10.0.1.99:8188` | Qwen-Image-Edit and MiniMax H3; shares the machine with training |
 
 Both addresses are in `config/runtime.yaml` and can be changed there without touching code.
 
@@ -143,7 +152,7 @@ Stagehand is the primary tool for all TikTok navigation. Key behaviours to know:
 
 ## ComfyUI — Notes for Agents
 
-- The API is at `http://10.0.1.3:8188`
+- The API is at `http://10.0.1.99:8188` (`config.comfyui`)
 - Submitting a job: `POST /api/prompt` with `{ prompt: <workflow_json>, client_id: "slop-lord" }`
 - Polling job status: `GET /api/history/<prompt_id>`
 - Available workflows (style presets) must be defined in `config/runtime.yaml → comfyui.stylePresets` — the agent should not invent workflow names that aren't in that list

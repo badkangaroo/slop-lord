@@ -1,8 +1,8 @@
 /**
  * parody-engine/minimax-dispatch.ts
  *
- * Submits a MiniMax H3 Image-to-Video job to ComfyUI running on the
- * DGX Spark at 10.0.1.3:8188, polls for completion, and saves the video.
+ * Submits a MiniMax H3 Image-to-Video job to ComfyUI at config.comfyui
+ * (10.0.1.99:8188), polls for completion, and saves the video.
  *
  * EVERYTHING RUNS LOCALLY — no cloud API key required.
  * Both Qwen-Image-Edit and MiniMax H3 share the same ComfyUI instance.

@@ -79,7 +79,8 @@ slop-lord/
 | Persistence | **Postgres 16** in Docker; schema in `db/migrations/`; Drizzle ORM in TypeScript |
 | TikTok auth | Human logs in once to **live visible Chrome**; agent attaches via CDP; session persists in profile dir |
 | Browser tool stack | SearXNG → Firecrawl → Stagehand → Playwright (in priority order; Stagehand/Playwright attach to live Chrome) |
-| ComfyUI | At `10.0.1.3:8188`; host/port in `config/runtime.yaml` |
+| ComfyUI | `10.0.1.99:8188` — Qwen-Image-Edit and MiniMax H3; host/port in `config/runtime.yaml` |
+| LLM while Spark trains | Desktop LM Studio `10.0.1.8:1234` for text, vision, and edit verification |
 | Web UI port | `0.0.0.0:3030` — LAN-accessible; **not** localhost-only |
 | Web UI framework | **Next.js** App Router + Tailwind + Drizzle |
 | Config strategy | `config/runtime.yaml` is source of truth; env vars override; no hardcoded addresses anywhere |
